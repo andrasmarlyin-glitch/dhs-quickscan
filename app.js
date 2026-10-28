@@ -43,6 +43,7 @@ function updateExpiry(){
 }
 for(const id of ['manualExpiry','manualLot','itemName'])$(id).oninput=()=>{$('nearConfirm').checked=false;$('stockConfirm').checked=false;updateExpiry();};
 for(const id of ['partner','sales','qty'])$(id).oninput=()=>{$('nearConfirm').checked=false;};
+$('sales').onchange=()=>{$('nearConfirm').checked=false;};
 $('stockInput').oninput=()=>{$('stockConfirm').checked=false;};
 window.addEventListener('focus',()=>{updateExpiry();render();});setInterval(updateExpiry,30000);
 async function readImageCode(url){

@@ -35,3 +35,5 @@ button{border-radius:4px;color:#202820;border-color:#cdd4c6}.primary{background:
 @media(max-width:540px){header{padding:16px 18px;gap:10px}.brand{gap:12px}.brand img{width:91px;height:40px}.brand span{font-size:25px;padding-left:12px}.brand small{font-size:9px;letter-spacing:1px}#connection{font-size:10px}main{padding:24px 16px}.card{padding:20px}nav button{font-size:19px;padding:12px 15px}h1{font-size:49px}}
 
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#f4f5f2;padding:10px;max-height:200px;overflow:auto}#productSetup details{margin-bottom:24px}#nextScan{margin-top:18px;width:100%}#stockStatus{font-weight:650}nav button{flex:1;padding-left:12px;padding-right:12px}@media(max-width:400px){nav{gap:0}nav button{font-size:17px;padding-left:7px;padding-right:7px}}
+
+select{font:inherit;width:100%;padding:13px;border:1px solid #c8cebf;border-radius:4px;background:#fff;color:#1f242e;font-size:16px;min-height:48px}select:focus-visible{outline:3px solid #4c861a;outline-offset:3px}
