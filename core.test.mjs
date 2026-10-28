@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO}from'./core.js';
+import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO,decodeScan,batchId,validateBatch}from'./core.js';
 test('GS1 zárójeles és FNC1 kód',()=>{const a=parseCode('(01)05901234567893(17)291231(10)DEMO(21)ABC');assert.deepEqual(a,{gtin:'05901234567893',expiry:'291231',lot:'DEMO',serial:'ABC'});assert.deepEqual(parseCode(']d201059012345678931729123110DEMO\x1d21ABC'),a);});
 test('EAN normalizálás',()=>assert.equal(parseCode('4012345678901').gtin,'04012345678901'));
 test('hibás GS1 és dátum elutasítása',()=>{for(const s of ['','hello','(01)123','(01)05901234567893(17)291332','(01)05901234567893(17)290230','(01)05901234567893(99)X'])assert.throws(()=>parseCode(s));});
@@ -44,4 +44,32 @@ test('kiadáskor új nap és óraátállítás is számít',()=>{
  assert.equal(expiryStatus('261026',new Date('2026-10-24T10:00:00Z')).days,2);
  assert.equal(expiryStatus('280200',new Date('2028-02-28T10:00:00Z')).days,1);
  assert.throws(()=>expiryStatus('261332'));
+});
+
+test('saját GTIN és GS1 katalógus nélkül feldolgozható',()=>{
+ const scan=decodeScan('(01)04260279096722(17)291231(10)SAJAT');
+ assert.equal(scan.parsed,true);assert.equal(scan.gtin,'04260279096722');
+ const item={...scan,name:'Saját termék'};
+ const id=validateBatch(item,5);assert.equal(id,batchId(item));
+ assert.notEqual(id,batchId({...item,lot:'MASIK'}));
+ assert.notEqual(id,batchId({...item,expiry:'301231'}));
+ assert.equal(checkedWithdrawal(item,5,2,new Date('2026-10-28T12:00:00Z'),{general:true}),3);
+});
+test('QR, URL és hibás GS1 megőrzése engedélyezett kiadás nélkül',()=>{
+ for(const raw of ['https://example.com/product/42','SAJAT-KOD-ABC','<img src=x onerror=alert(1)>','(01)04260279096722(17)261332(10)A','4012345678902']){
+  const scan=decodeScan(raw);assert.equal(scan.raw,raw);assert.equal(scan.parsed,false);assert.equal(scan.gtin,'');assert.ok(scan.parseError);
+ }
+ assert.throws(()=>decodeScan(' '));assert.throws(()=>decodeScan('X'.repeat(16001)));
+});
+test('tényleges készlethez név, LOT, dátum és egész mennyiség kell',()=>{
+ const item={gtin:'04260279096722',name:'Termék',lot:'A',expiry:'291231'};
+ for(const qty of [-1,1.5,NaN,Infinity])assert.throws(()=>validateBatch(item,qty));
+ assert.throws(()=>validateBatch({...item,name:''},1));
+ assert.throws(()=>validateBatch({...item,lot:''},1));
+ assert.throws(()=>validateBatch({...item,expiry:'261332'},1));
+ assert.doesNotThrow(()=>validateBatch(item,0));
+});
+test('CSV a nyers QR-t is megőrzi és védi a képletként értelmezést',()=>{
+ const text=csv([{event:'Beolvasás',raw:'=1+1',source:'kép',parseError:'Nem GS1'}]);
+ assert.ok(text.includes('Nyers kód'));assert.ok(text.includes('"\'=1+1"'));assert.ok(text.includes('Nem GS1'));
 });

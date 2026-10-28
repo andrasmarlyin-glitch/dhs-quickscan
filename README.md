@@ -1,16 +1,18 @@
-# QuickScan – 90 napos lejáratvédelem
+# DHS QuickScan 1.0
 
-DHS arculatú tesztváltozat, kizárólag fiktív készlettel. Közzétételi cím: https://dhs-quickscan.netlify.app/
+Saját vonalkódok és QR-kódok kamerás, képfájlos és kézi beolvasása. Nincs előre feltöltött demótermék vagy fiktív készlet.
 
-Helyi adattárolás: nem központi, többfelhasználós raktári rendszer. A fizikai telefon kamerája külön készülékpróbát igényel.
+- Minden sikeres dekódolás nyers tartalma és feldolgozási eredménye helyi naplóba kerül.
+- GS1/GTIN: új terméknév megadása; LOT és lejárat a kódból, hiány esetén a csomagolásról.
+- Tényleges készlet rögzítése termék + LOT + lejárat szerint, naplózott helyesbítésekkel.
+- Kiadás kötelező kiadóval és partnerrel, mennyiség- és készletellenőrzéssel.
+- Lejárt: tiltva; 0–90 nap: külön megerősítés; a lejárat napján még kiadható külön megerősítéssel.
+- Készletnézet, CSV és teljes JSON-mentés letöltése.
+- Nincs központi szinkron, hitelesített felhasználókezelés vagy más raktári rendszerbe írás. A napló nem megváltoztathatatlan szerveroldali auditnapló.
+- A böngészőadatok törlésével az adatok elveszhetnek: mentés szükséges. A korábbi demóadatokat külön kulcs alatt érintetlenül hagyja, az új adatbázis üresen indul.
+- A termékadatok és beolvasások nem kerülnek a nyilvános repositoryba vagy szerverre.
+- Tetszőleges QR-szöveget és URL-t megőriz, de nem nyit meg automatikusan. Nem értelmezhető GS1-adatból nem enged kiadást.
 
-- Lejárt: kiadás tiltva.
-- 0–90 nap hátralévő idő (90. nap is): külön jóváhagyás kell.
-- 91 naptól: normál kiadás.
-- Lejárat napján még kiadható, külön jóváhagyással.
-- Hiányzó / hibás lejárat vagy LOT: kiadás tiltva.
-- Budapesti naptári napok; véglegesítéskor ismételt ellenőrzés.
-- Közeli lejárat jóváhagyása: kiadó, partner, lejárat és hátralévő napok a helyi naplóban és CSV-ben.
-- Ez személyes megerősítés, nem jogosultsághoz kötött vezetői engedély.
+Közzététel: https://dhs-quickscan.netlify.app/
 
-Futtatás: npm test, npm run build. A dist mappa helyi webkiszolgálóval nyitható meg. A készülék óráját használja; nem központi raktári rendszer.
+Ellenőrzés: npm test && npm run build. A fizikai iPhone kamerás teljesítményét a helyszínen kell kipróbálni; sérült vagy homályos kódok olvasása nem garantálható.

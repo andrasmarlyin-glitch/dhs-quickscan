@@ -1,9 +1,9 @@
 # Ellenőrzés – 2026. október 28.
 
-13 automatikus teszt sikeres. Ellenőrizve: lejárt, 0/89/90/91 napos határ, külön megerősítés, hiányzó adatok, budapesti napváltás, óraátállítás, szökőév.
+17 automatikus teszt sikeres. GS1, GTIN ellenőrzőszám, LOT, dátumvalidálás, 90 napos határ, éjfél, szökőév, túlkivétel, QR nyers tartalom, hibás GS1, CSV képletinjekció és tételazonosítók.
 
-Böngészőben: a 90 napos tétel kiadása külön megerősítés nélkül blokkolt; jóváhagyással készletcsökkentés és naplózás sikeres. Lejárt tételnél a kiadási gomb tiltott.
+Böngészőben új termék felvétele saját GTIN alapján; tényleges készlet 5 db rögzítése; 90 napos megerősítés nélküli kiadás tiltva; megerősítéssel 1 db kiadás után 4 db marad.
 
-DHS logó és helyi Bebas Neue betűkészlet. 90 napos figyelmeztetés sárga, lejárt piros.
+Generált QR-képből a DHS-ELLENORZES-QR-2026 tartalom dekódolása és naplózása sikeres. Teljes JSON-mentés letöltése sikeres.
 
-Korlát: helyi fiktív készlet és napló, nincs központi adatbázis, hitelesített szerepkör, e-mail-küldés vagy készülékek közötti szinkron. A lejáratvédelem a készülék órájára épül.
+Fizikai iPhone kamera, valós csomagolások és nagy helyszíni beolvasássorozat külön ellenőrzendő.

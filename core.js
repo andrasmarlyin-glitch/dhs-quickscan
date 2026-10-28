@@ -1,4 +1,3 @@
-export const products=[{gtin:'05901234567893',name:'Demo steril kötszer',stock:12},{gtin:'04012345678901',name:'Demo vizsgálókesztyű',stock:30}];
 export function parseCode(raw){
  let s=raw.trim().replace(/^\](?:d2|C1|Q3)/,''); if(!s)throw Error('Adj meg egy kódot.');
  if(/^\d{8}$|^\d{12,14}$/.test(s)){validateGTIN(s);return {gtin:s.padStart(14,'0'),lot:'',expiry:'',serial:''};}
@@ -13,8 +12,8 @@ export function parseCode(raw){
  if(out.expiry){if(!/^\d{6}$/.test(out.expiry))throw Error('Hibás lejárat: ÉÉHHNN szükséges.');let y=2000+ +out.expiry.slice(0,2),m=+out.expiry.slice(2,4),d=+out.expiry.slice(4);if(m<1||m>12||d>new Date(y,m,0).getDate())throw Error('Érvénytelen lejárati dátum.');}
  return out;
 }
-export function take(stock,qty){if(!Number.isSafeInteger(stock)||stock<0)throw Error('Hibás helyi tesztkészlet.');if(!Number.isSafeInteger(qty)||qty<1)throw Error('Pozitív egész mennyiség szükséges.');if(qty>stock)throw Error('Nincs elegendő tesztkészlet.');return stock-qty;}
-export function csv(rows){const cell=v=>'"'+String(/^[=+@\-\t\r]/.test(String(v))?'\''+v:v).replaceAll('"','""')+'"';return '\ufeff'+[['Időpont','Esemény','Termék','GTIN','LOT','Lejárat','Sorozatszám','Mennyiség','Saleses','Partner','Megjegyzés'],...rows.map(r=>[r.time,r.event,r.name||'',r.gtin||'',r.lot||'',r.expiry||'',r.serial||'',r.qty||'',r.sales||'',r.partner||'',r.note||''])].map(r=>r.map(cell).join(';')).join('\r\n');}
+export function take(stock,qty){if(!Number.isSafeInteger(stock)||stock<0)throw Error('Hibás helyi készlet.');if(!Number.isSafeInteger(qty)||qty<1)throw Error('Pozitív egész mennyiség szükséges.');if(qty>stock)throw Error('Nincs elegendő készlet.');return stock-qty;}
+export function csv(rows){const cell=v=>'"'+String(/^[=+@\-\t\r]/.test(String(v))?'\''+v:v).replaceAll('"','""')+'"';return '\ufeff'+[['Időpont','Esemény','Termék','GTIN','LOT','Lejárat','Sorozatszám','Mennyiség','Saleses','Partner','Megjegyzés','Nyers kód','Forrás','Feldolgozás'],...rows.map(r=>[r.time,r.event,r.name||'',r.gtin||'',r.lot||'',r.expiry||'',r.serial||'',r.qty||'',r.sales||'',r.partner||'',r.note||'',r.raw||'',r.source||'',r.parseError||''])].map(r=>r.map(cell).join(';')).join('\r\n');}
 
 export function validateGTIN(value){
  if(!/^(?:\d{8}|\d{12,14})$/.test(value))throw Error('A GTIN 8, 12, 13 vagy 14 számjegy legyen.');
@@ -43,4 +42,20 @@ export function validateWithdrawal(item,stock,qty,now=new Date(),confirmation={}
  if(confirmation.general!==true)throw Error('Erősítsd meg a kivételt.');
  if(info.status==='near'&&confirmation.nearExpiry!==true)throw Error('90 napon belüli lejárat: külön megerősítés szükséges.');
  return take(stock,qty);
+}
+
+export function decodeScan(raw){
+ if(typeof raw!=='string'||!raw.trim())throw Error('Adj meg vagy olvass be egy kódot.');
+ if(raw.length>16000)throw Error('A kód túl hosszú (legfeljebb 16000 karakter).');
+ try{return {raw,...parseCode(raw),parsed:true,parseError:''};}
+ catch(e){return {raw,gtin:'',lot:'',expiry:'',serial:'',parsed:false,parseError:e.message};}
+}
+export function batchId(item){return JSON.stringify([item.gtin,item.lot.trim(),expiryISO(item.expiry)]);}
+export function validateBatch(item,stock){
+ validateGTIN(item.gtin);
+ if(!item.name?.trim())throw Error('Add meg a termék nevét a csomagolásról.');
+ if(!item.lot?.trim()||item.lot.length>20)throw Error('Adj meg egy legfeljebb 20 karakteres LOT-ot.');
+ expiryISO(item.expiry);
+ if(!Number.isSafeInteger(stock)||stock<0)throw Error('A tényleges készlet nemnegatív egész szám legyen.');
+ return batchId(item);
 }
