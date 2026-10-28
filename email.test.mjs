@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {handle,buildMail} from './netlify/functions/send-dispatch.mjs';
+const order={id:'mail-check-1',time:'2026-10-28T10:00:00Z',sales:'Kiss Pista',partner:'Honvédkórház',note:'Beavatkozáshoz',nearApproved:false,items:[{gtin:'04260279096722',lot:'A',expiry:'291231',qty:2,raw:'(01)04260279096722(17)291231(10)A',name:'Termék'}]};
+const env={DHS_DEVICE_KEY:'fake-device-key-for-unit-tests-only',GMAIL_CLIENT_ID:'test',GMAIL_CLIENT_SECRET:'test',GMAIL_REFRESH_TOKEN:'test'};
+const request=(key=env.DHS_DEVICE_KEY)=>new Request('https://dhs-quickscan.netlify.app/.netlify/functions/send-dispatch',{method:'POST',headers:{Origin:'https://dhs-quickscan.netlify.app',Authorization:'Bearer '+key},body:JSON.stringify(order)});
+test('e-mail fix feladó és címzett, CSV melléklettel',()=>{const raw=buildMail(order);assert.ok(raw.includes('From: andras.marlyin@gmail.com'));assert.ok(raw.includes('To: mr.marlyin@gmail.com'));assert.ok(raw.includes('Content-Type: text/csv'));assert.ok(raw.includes('Message-ID: <mail-check-1@dhs-quickscan.netlify.app>'));});
+test('hiányzó összekapcsolás és jogosulatlan telefon nem küld',async()=>{let calls=0;const fetcher=()=>{calls++;throw Error();};assert.equal((await handle(request(),{},fetcher)).status,503);assert.equal((await handle(request('bad'),env,fetcher)).status,401);assert.equal(calls,0);});
+test('siker csak Gmail-visszaigazolás után',async()=>{let calls=0;const response=await handle(request(),env,async url=>{calls++;return url.includes('oauth2')?Response.json({access_token:'test'}):Response.json({id:'gmail-accepted-123'});});assert.equal(response.status,200);assert.equal((await response.json()).messageId,'gmail-accepted-123');assert.equal(calls,2);});
+test('küldés közbeni hálózati hiba bizonytalan állapot',async()=>{const response=await handle(request(),env,async url=>{if(url.includes('oauth2'))return Response.json({access_token:'test'});throw Error('timeout');});assert.equal((await response.json()).code,'send_unknown');});
+test('engedélyezési hiba esetén Gmail-küldés nem indul',async()=>{let calls=0;const response=await handle(request(),env,async()=>{calls++;return new Response('',{status:401});});assert.equal((await response.json()).code,'gmail_authorization');assert.equal(calls,1);});
