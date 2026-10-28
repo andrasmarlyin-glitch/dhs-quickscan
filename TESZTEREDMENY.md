@@ -1,6 +1,9 @@
-# Ellenőrzés — 2026. október 24.
+# Ellenőrzés – 2026. október 28.
 
-- 9 automatikus teszt: GS1 zárójeles és FNC1, EAN normalizálás, hibás dátum/mező, hónapvége, GTIN ellenőrzőszám, ismételt mező, lejárati tiltás, hiányzó LOT/lejárat, budapesti napváltás, készletkorlát és CSV escaping.
-- Böngészőben: lejárt tesztgomb tiltja a rögzítést; érvényes GS1 termék saleses kivétele menthető, a napló frissül.
-- A fizikai iPhone kamerája és a nyomtatott Data Matrix olvasása külön készülékpróbát igényel. Az iPhone Safarihoz HTTPS, playsinline videó, felhasználói gombnyomásra induló getUserMedia és helyi ZXing dekóder biztosított.
-- Minden adat kitalált, a tárolás böngészőnként helyi; nincs valódi készletadatbázis vagy e-mail.
+13 automatikus teszt sikeres. Ellenőrizve: lejárt, 0/89/90/91 napos határ, külön megerősítés, hiányzó adatok, budapesti napváltás, óraátállítás, szökőév.
+
+Böngészőben: a 90 napos tétel kiadása külön megerősítés nélkül blokkolt; jóváhagyással készletcsökkentés és naplózás sikeres. Lejárt tételnél a kiadási gomb tiltott.
+
+DHS logó és helyi Bebas Neue betűkészlet. 90 napos figyelmeztetés sárga, lejárt piros.
+
+Korlát: helyi fiktív készlet és napló, nincs központi adatbázis, hitelesített szerepkör, e-mail-küldés vagy készülékek közötti szinkron. A lejáratvédelem a készülék órájára épül.
