@@ -66,7 +66,7 @@ function download(blob,name){const url=URL.createObjectURL(blob),a=document.crea
 function connection(){$('connection').textContent=navigator.onLine?'● Online':'○ Offline';}window.addEventListener('online',connection);window.addEventListener('offline',connection);connection();render();
 if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js').then(async()=>{await navigator.serviceWorker.ready;$('offlineReady').textContent='Offline használatra kész';}).catch(()=>{$('offlineReady').textContent='Offline gyorsítótár nem érhető el';});}else $('offlineReady').textContent='Offline mód nem támogatott';
 
-function emailLabel(order){const status=order.email?.status;return status==='sent'?'E-mail elküldve: mr.marlyin@gmail.com':status==='sending'||status==='unknown'?'E-mail: a küldés eredménye ellenőrizendő. Az automatikus újraküldés szünetel a duplázás elkerülésére.':status==='error'?'E-mail nem ment el. Kézzel újrapróbálható.':status==='pending'?'E-mail küldésre vár (internet és Gmail-összekapcsolás szükséges).':'Korábbi kivitel: automatikus e-mail nem lett kérve.';}
+function emailLabel(order){const status=order.email?.status;return status==='sent'?'E-mail elküldve: mr.marlyin@gmail.com':status==='sending'?'E-mail küldése folyamatban…':status==='unknown'?'E-mail: a küldés eredménye ellenőrizendő. Az automatikus újraküldés szünetel a duplázás elkerülésére.':status==='error'?'E-mail nem ment el. Kézzel újrapróbálható.':status==='pending'?'E-mail küldésre vár (internet és Gmail-összekapcsolás szükséges).':'Korábbi kivitel: automatikus e-mail nem lett kérve.';}
 function updateEmail(id,email){return save({...state,orders:state.orders.map(order=>order.id===id?{...order,email}:order)});}
 async function sendOrderMail(id){
  if(mailBusy||!navigator.onLine)return;
@@ -84,7 +84,8 @@ async function sendOrderMail(id){
  }catch{updateEmail(id,{status:'unknown'});}finally{mailBusy=false;}
 }
 async function sendPendingMail(){for(const order of state.orders.filter(o=>o.email?.status==='pending'))await sendOrderMail(order.id);}
-function pairDevice(value){if(value.length<32){show('A szerverhez tartozó, legalább 32 karakteres párosítási kód szükséges.');return;}try{localStorage.setItem('dhs-mail-device-key',value);$('mailDeviceKey').value='';$('emailSetupStatus').textContent='Telefon párosítva; a függő küldéseket ellenőrizzük.';sendPendingMail();}catch{show('A párosítás nem menthető ezen az eszközön.');}}
+function pairDevice(value){if(value.length<32){show('A szerverhez tartozó, legalább 32 karakteres párosítási kód szükséges.');return;}try{localStorage.setItem('dhs-mail-device-key',value);$('mailDeviceKey').value='';$('emailSetupStatus').textContent='Telefon párosítva; a függő küldéseket ellenőrizzük.';show('Telefon párosítva. Az új kivitelek adatait automatikusan elküldjük e-mailben.');sendPendingMail();}catch{show('A párosítás nem menthető ezen az eszközön.');}}
 $('pairMail').onclick=()=>pairDevice($('mailDeviceKey').value.trim());
+if(localStorage.getItem('dhs-mail-device-key'))$('emailSetupStatus').textContent='Ez az eszköz párosítva van az automatikus e-mail-küldéshez.';
 window.addEventListener('online',sendPendingMail);
 sendPendingMail();
