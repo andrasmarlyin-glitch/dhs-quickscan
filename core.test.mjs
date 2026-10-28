@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO,decodeScan,batchId,validateBatch}from'./core.js';
+import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO,decodeScan,batchId,validateBatch,validateDispatch,dispatchRows}from'./core.js';
 test('GS1 zárójeles és FNC1 kód',()=>{const a=parseCode('(01)05901234567893(17)291231(10)DEMO(21)ABC');assert.deepEqual(a,{gtin:'05901234567893',expiry:'291231',lot:'DEMO',serial:'ABC'});assert.deepEqual(parseCode(']d201059012345678931729123110DEMO\x1d21ABC'),a);});
 test('EAN normalizálás',()=>assert.equal(parseCode('4012345678901').gtin,'04012345678901'));
 test('hibás GS1 és dátum elutasítása',()=>{for(const s of ['','hello','(01)123','(01)05901234567893(17)291332','(01)05901234567893(17)290230','(01)05901234567893(99)X'])assert.throws(()=>parseCode(s));});
@@ -72,4 +72,27 @@ test('tényleges készlethez név, LOT, dátum és egész mennyiség kell',()=>{
 test('CSV a nyers QR-t is megőrzi és védi a képletként értelmezést',()=>{
  const text=csv([{event:'Beolvasás',raw:'=1+1',source:'kép',parseError:'Nem GS1'}]);
  assert.ok(text.includes('Nyers kód'));assert.ok(text.includes('"\'=1+1"'));assert.ok(text.includes('Nem GS1'));
+});
+
+test('közös kivitel készletfelvitel nélkül',()=>{
+ const item={...decodeScan('(01)04260279096722(17)291231(10)A'),qty:1};
+ const result=validateDispatch(Array.from({length:5},()=>({...item})),'Kiss Pista','Honvédkórház',new Date('2026-10-28T12:00:00Z'),{general:true});
+ assert.equal(result.total,5);assert.equal(result.near,false);
+ const order={id:'K1',time:'2026-10-28T12:00:00Z',sales:'Kiss Pista',partner:'Honvédkórház',note:'beavatkozáshoz',items:[item]};
+ const rows=dispatchRows(order);assert.equal(rows[0].sales,'Kiss Pista');assert.equal(rows[0].partner,'Honvédkórház');assert.ok(rows[0].note.includes('K1'));assert.ok(rows[0].note.includes('beavatkozáshoz'));
+});
+test('kivitel véglegesítésekor minden tétel újra ellenőrzött',()=>{
+ const item={...decodeScan('(01)04260279096722(17)270126(10)A'),qty:1},now=new Date('2026-10-28T12:00:00Z');
+ assert.throws(()=>validateDispatch([item],'Pista','Kórház',now,{general:true}),/külön megerősítés/);
+ assert.equal(validateDispatch([item],'Pista','Kórház',now,{general:true,nearExpiry:true}).near,true);
+ assert.throws(()=>validateDispatch([{...item,expiry:'261027'}],'Pista','Kórház',now,{general:true,nearExpiry:true}),/TILTVA/);
+ assert.throws(()=>validateDispatch([],'Pista','Kórház',now,{general:true}));
+ assert.throws(()=>validateDispatch([item],'','Kórház',now,{general:true}));
+ assert.throws(()=>validateDispatch([{...item,lot:''}],'Pista','Kórház',now,{general:true}));
+ assert.throws(()=>validateDispatch([{...item,parsed:false}],'Pista','Kórház',now,{general:true}));
+});
+test('sorozatszámos termék duplázása és többszörös darabszáma tiltott',()=>{
+ const item={...decodeScan('(01)04260279096722(17)291231(10)A(21)SN1'),qty:1},now=new Date('2026-10-28T12:00:00Z');
+ assert.throws(()=>validateDispatch([item,item],'Pista','Kórház',now,{general:true}),/sorozatszám/);
+ assert.throws(()=>validateDispatch([{...item,qty:2}],'Pista','Kórház',now,{general:true}),/sorozatszám/);
 });

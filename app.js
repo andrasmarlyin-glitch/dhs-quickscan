@@ -1,51 +1,33 @@
-import {decodeScan,validateBatch,batchId,validateWithdrawal,expiryISO,expiryStatus,csv} from './core.js';
+import {decodeScan,expiryISO,expiryStatus,csv,validateDispatch,dispatchRows} from './core.js';
 const $=id=>document.getElementById(id),key='dhs-quickscan-local-v1';
-let storageBroken=false,lastStored=null;let state={catalog:{},batches:{},logs:[]},selected=null,controls=null,starting=false,session=0;
-try{lastStored=localStorage.getItem(key);const saved=JSON.parse(lastStored);if(saved){if(!saved.catalog||!saved.batches||!Array.isArray(saved.logs))throw Error('Hibás mentés');state=saved;}}catch{storageBroken=true;show('A helyi adatokat nem sikerült betölteni. Ne rögzíts új műveletet, amíg a korábbi mentést nem ellenőrizted.');}
+let state={catalog:{},batches:{},logs:[],orders:[],draft:[]},selected=null,controls=null,starting=false,session=0,lastStored=null,storageBroken=false;
+try{lastStored=localStorage.getItem(key);const saved=JSON.parse(lastStored);if(saved){if(!Array.isArray(saved.logs))throw Error();state={...state,...saved};}}catch{storageBroken=true;show('A korábbi adatokat nem sikerült betölteni. A mentés zárolva van.');}
 function show(t){$('message').textContent=t;}
-function save(next){try{if(storageBroken)throw Error('Hibás korábbi mentés');if(localStorage.getItem(key)!==lastStored){show('Egy másik ablak módosította az adatokat. Töltsd újra az alkalmazást a folytatáshoz.');return false;}const stored=JSON.stringify(next);localStorage.setItem(key,stored);lastStored=stored;state=next;render();return true;}catch{show('Nem sikerült menteni. A művelet nem lett rögzítve. Ellenőrizd a telefon tárhelyét.');return false;}}
+function save(next){try{if(storageBroken)throw Error();if(localStorage.getItem(key)!==lastStored){show('Másik ablak módosította az adatokat. Töltsd újra az appot.');return false;}const data=JSON.stringify(next);localStorage.setItem(key,data);lastStored=data;state=next;render();return true;}catch{show('Nem sikerült menteni. A művelet nem lett rögzítve.');return false;}}
+function text(tag,value){const el=document.createElement(tag);el.textContent=value;return el;}
+function itemDescription(i){return [i.name||i.gtin,`${i.qty} db`,'LOT: '+i.lot,'Lejárat: '+expiryISO(i.expiry),i.serial?'SN: '+i.serial:''].filter(Boolean).join(' · ');}
 function render(){
- $('count').textContent=state.logs.length;$('entries').replaceChildren();
- if(!state.logs.length)$('entries').textContent='Még nincs beolvasás. Indítsd el a kamerát vagy válassz képet.';
- for(const r of state.logs){const el=document.createElement('div');el.className='entry';const title=document.createElement('b');title.textContent=r.event;const time=document.createElement('small');time.textContent=new Date(r.time).toLocaleString('hu-HU');const p=document.createElement('p');p.textContent=[r.name,Number.isInteger(r.qty)?`${r.qty} db`:'',r.sales,r.partner,r.gtin,r.lot,r.expiry?expiryISO(r.expiry):'',r.note,r.parseError].filter(Boolean).join(' · ');el.append(time,document.createElement('br'),title,p);if(r.raw){const raw=document.createElement('pre');raw.textContent=r.raw;el.append(raw);}$('entries').append(el);}
- $('inventoryEntries').replaceChildren();
- if(!Object.keys(state.batches).length)$('inventoryEntries').textContent='Nincs rögzített tétel. Beolvasás után add meg a tényleges készletet.';
- for(const b of Object.values(state.batches)){const el=document.createElement('div'),info=expiryStatus(b.expiry);el.className='entry';const title=document.createElement('b');title.textContent=b.name;const p=document.createElement('p');p.textContent=`${b.stock} db · LOT: ${b.lot} · ${info.expiry} · ${info.status==='expired'?'LEJÁRT':info.status==='near'?`KÖZELI LEJÁRAT (${info.days} nap)`:`${info.days} nap`} · GTIN: ${b.gtin}`;el.append(title,p);$('inventoryEntries').append(el);}
+ $('count').textContent=state.orders.length;$('cartCount').textContent=state.draft.reduce((n,i)=>n+i.qty,0);$('cartEntries').replaceChildren();
+ if(!state.draft.length)$('cartEntries').append(text('p','Még nincs hozzáadott termék. Olvasd be a kivinni kívánt termékeket.'));
+ state.draft.forEach((i,index)=>{const row=text('div','');row.className='entry';row.append(text('p',itemDescription(i)));const info=expiryStatus(i.expiry);if(info.status!=='valid'){const warning=text('p',info.status==='expired'?'LEJÁRT – nem vihető ki':`KÖZELI LEJÁRAT – ${info.days} nap`);warning.className='expiry '+(info.status==='expired'?'danger':'warning');row.append(warning);}const remove=text('button','Eltávolítás');remove.type='button';remove.onclick=()=>{if(save({...state,draft:state.draft.filter((_,n)=>n!==index)})){$('nearConfirm').checked=false;$('confirm').checked=false;}};row.append(remove);$('cartEntries').append(row);});
+ $('entries').replaceChildren();if(!state.orders.length)$('entries').append(text('p','Még nincs véglegesített kivitel.'));
+ for(const order of state.orders){const row=text('div','');row.className='entry';row.append(text('h3',`${order.sales} → ${order.partner}`),text('p',`${new Date(order.time).toLocaleString('hu-HU')} · ${order.id}`),text('p',order.note||''));for(const i of order.items)row.append(text('p',itemDescription(i)));const exportButton=text('button','Kivitel CSV letöltése');exportButton.onclick=()=>exportOrder(order);const shareButton=text('button','Megosztás / e-mail');shareButton.onclick=()=>shareOrder(order);row.append(exportButton,shareButton);$('entries').append(row);}
+ if(state.logs.length){const details=document.createElement('details');details.append(text('summary','Beolvasási és korábbi napló ('+state.logs.length+')'));for(const r of state.logs){const row=text('div','');row.className='entry';row.append(text('p',[r.time,r.event,r.name,r.sales,r.partner,r.note].filter(Boolean).join(' · ')),text('pre',r.raw||r.gtin||''));details.append(row);}$('entries').append(details);}
+ updateCart();
 }
-function currentItem(){
- const date=$('manualExpiry').value;
- if(!/^20\d{2}-\d{2}-\d{2}$/.test(date))throw Error('Adj meg egy 2000–2099 közötti lejárati dátumot.');
- return {...selected,name:$('itemName').value.trim(),lot:$('manualLot').value.trim(),expiry:date.slice(2).replaceAll('-','')};
-}
-function identify(raw,source){try{
- const code=decodeScan(raw);selected={...code,source};$('result').hidden=false;$('withdraw').reset();
- $('fields').replaceChildren();
- for(const [label,value] of Object.entries({'GTIN':code.gtin||'—','LOT':code.lot||'—','Lejárat':code.expiry?expiryISO(code.expiry):'—','Gyártás':code.production?expiryISO(code.production):'—','Sorozatszám':code.serial||'—','Belső adat (91)':code.internal91||'—','Nyers kód':raw})){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;$('fields').append(dt,dd);}
- $('productName').textContent=code.gtin?(state.catalog[code.gtin]?.name||'Új termék – add meg a nevét'):'Beolvasott QR- / vonalkód';
- $('itemName').value=state.catalog[code.gtin]?.name||'';$('manualLot').value=code.lot;$('manualLot').readOnly=!!code.lot;
- $('manualExpiry').value=code.expiry?expiryISO(code.expiry):'';$('manualExpiry').readOnly=!!code.expiry;
- $('stockInput').value='';$('stockConfirm').checked=false;$('productSetup').hidden=!code.parsed;$('withdraw').hidden=!code.parsed;
- if(code.parsed)updateExpiry();else{$('expiryStatus').className='expiry warning';$('expiryStatus').textContent='A kód nyers tartalma elmenthető, de nem igazolt termékazonosító / GS1 adat. Lejárat és készlet nem állapítható meg belőle; kiadás nem engedélyezett. '+code.parseError;}
- const record={...code,source,name:state.catalog[code.gtin]?.name||'',time:new Date().toISOString(),event:code.parsed?'Beolvasás':'Beolvasás – nyers kód'};
- show(save({...state,logs:[record,...state.logs]})?'Beolvasás elmentve a telefonon.':'A beolvasás látható, de nem sikerült menteni.');
- $('result').scrollIntoView({behavior:'smooth',block:'start'});
- }catch(e){selected=null;$('result').hidden=true;show(e.message);}}
-function updateExpiry(){
- if(!selected?.parsed)return;
- let info,item,batch;try{item=currentItem();info=expiryStatus(item.expiry);batch=state.batches[batchId(item)];}catch{}
- const near=info?.status==='near';$('nearWarning').hidden=!near;$('nearConfirm').required=near;if(!near)$('nearConfirm').checked=false;
- const missingLot=!$('manualLot').value.trim();
- $('issueButton').disabled=!info||info.status==='expired'||missingLot||!batch||batch.stock<1||batch.name!==$('itemName').value.trim();
- $('stockStatus').textContent=batch?`Rögzített készlet ennél a LOT-nál és lejáratnál: ${batch.stock} db`:'Ennek a tételnek még nincs rögzített készlete.';
- $('expiryStatus').className='expiry '+(!info||info.status==='expired'?'danger':near?'warning':'');
- $('expiryStatus').textContent=!info?'Hiányzó vagy hibás lejárat · A kiadás tiltva.':info.status==='expired'?`LEJÁRT · ${info.expiry} · A kiadás tiltva.`:near?`KÖZELI LEJÁRAT · ${info.expiry} · ${info.days} nap van hátra. Külön megerősítés szükséges.`:`Érvényes lejárat · ${info.expiry} · ${info.days} nap van hátra.`;
- if(missingLot)$('expiryStatus').textContent+=' A LOT megadása kötelező.';
-}
-for(const id of ['manualExpiry','manualLot','itemName'])$(id).oninput=()=>{$('nearConfirm').checked=false;$('stockConfirm').checked=false;updateExpiry();};
-for(const id of ['partner','sales','qty'])$(id).oninput=()=>{$('nearConfirm').checked=false;};
-$('sales').onchange=()=>{$('nearConfirm').checked=false;};
-$('stockInput').oninput=()=>{$('stockConfirm').checked=false;};
-window.addEventListener('focus',()=>{updateExpiry();render();});setInterval(updateExpiry,30000);
+function exportOrder(order){download(new Blob([csv(dispatchRows(order))],{type:'text/csv;charset=utf-8'}),'DHS-kivitel-'+order.id+'.csv');}
+async function shareOrder(order){const file=new File([csv(dispatchRows(order))],'DHS-kivitel-'+order.id+'.csv',{type:'text/csv'});try{if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:'DHS raktári kivitel',text:`${order.sales} → ${order.partner} · ${order.id}`});}else{exportOrder(order);show('CSV letöltve. A Fájlok / Megosztás menüből e-mailhez csatolhatod.');}}catch(e){if(e.name!=='AbortError')show('Megosztás nem sikerült. Használd a CSV letöltése gombot.');}}
+function currentItem(){const date=$('manualExpiry').value;if(!/^20\d{2}-\d{2}-\d{2}$/.test(date))throw Error('Add meg a csomagoláson szereplő lejáratot.');return {...selected,name:$('itemName').value.trim(),lot:$('manualLot').value.trim(),expiry:date.slice(2).replaceAll('-',''),qty:Number($('qty').value)};}
+function identify(raw,source){try{const code=decodeScan(raw);selected={...code,source};$('result').hidden=false;$('fields').replaceChildren();for(const [label,value] of Object.entries({'GTIN':code.gtin||'—','LOT':code.lot||'—','Lejárat':code.expiry?expiryISO(code.expiry):'—','Sorozatszám':code.serial||'—','Nyers kód':raw})){$('fields').append(text('dt',label),text('dd',value));}$('productName').textContent=state.catalog[code.gtin]?.name||'Beolvasott termék';$('itemName').value=state.catalog[code.gtin]?.name||'';$('manualLot').value=code.lot;$('manualLot').readOnly=!!code.lot;$('manualExpiry').value=code.expiry?expiryISO(code.expiry):'';$('manualExpiry').readOnly=!!code.expiry;$('qty').value=1;$('qty').readOnly=!!code.serial;$('productSetup').hidden=!code.parsed;updateExpiry();save({...state,logs:[{...code,source,time:new Date().toISOString(),event:'Beolvasás'},...state.logs]});$('result').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){selected=null;show(e.message);}}
+function updateExpiry(){if(!selected)return;let info;try{info=expiryStatus(currentItem().expiry);}catch{}$('addItem').disabled=!selected.parsed||!info||info.status==='expired'||!$('manualLot').value.trim();$('expiryStatus').className='expiry '+(!info||info.status==='expired'?'danger':info.status==='near'?'warning':'');$('expiryStatus').textContent=!selected.parsed?'A nyers kód elmentve; nem értelmezhető termékkódként. Kivitelhez ellenőrzött termékadat szükséges.':!info?'Hiányzó vagy hibás lejárat – egészítsd ki a csomagolásról.':info.status==='expired'?'LEJÁRT – kivitel tiltva.':info.status==='near'?`KÖZELI LEJÁRAT – ${info.days} nap. Véglegesítéskor külön jóváhagyás kell.`:`Érvényes lejárat: ${info.expiry}`;}
+function updateCart(){let near=false,blocked=!state.draft.length;for(const item of state.draft){try{const info=expiryStatus(item.expiry);near||=info.status==='near';blocked||=info.status==='expired';}catch{blocked=true;}}$('nearWarning').hidden=!near;$('nearConfirm').required=near;$('issueButton').disabled=blocked;}
+function addSelected(){if(!selected?.parsed)throw Error('Nem értelmezhető termékkód.');const item=currentItem();validateDispatch([item],'ellenőrzés','ellenőrzés',new Date(),{general:true,nearExpiry:true});const draft=state.draft.map(i=>({...i}));if(item.serial&&draft.some(i=>i.gtin===item.gtin&&i.serial===item.serial))throw Error('Ez a sorozatszámos termék már a kivitelben van.');const same=draft.find(i=>!i.serial&&!item.serial&&i.raw===item.raw&&i.gtin===item.gtin&&i.lot===item.lot&&i.expiry===item.expiry&&i.name===item.name);if(same)same.qty+=item.qty;else draft.push(item);const catalog=item.name?{...state.catalog,[item.gtin]:{name:item.name}}:state.catalog;if(save({...state,catalog,draft})){$('nearConfirm').checked=false;$('confirm').checked=false;selected=null;$('result').hidden=true;show(`Hozzáadva. A kivitelben ${draft.reduce((n,i)=>n+i.qty,0)} db termék van. Olvasd be a következőt, vagy nyisd meg a Kivitel oldalt.`);$('start').scrollIntoView({behavior:'smooth'});}}
+$('addItem').onclick=()=>{try{addSelected();}catch(e){show(e.message);}};
+for(const id of ['manualExpiry','manualLot','qty'])$(id).oninput=updateExpiry;
+for(const id of ['sales','partner']){$(id).oninput=()=>{$('nearConfirm').checked=false;$('confirm').checked=false;};$(id).onchange=$(id).oninput;}
+$('withdraw').onsubmit=e=>{e.preventDefault();try{const now=new Date(),sales=$('sales').value,partner=$('partner').value.trim(),result=validateDispatch(state.draft,sales,partner,now,{general:$('confirm').checked,nearExpiry:$('nearConfirm').checked});const order={id:crypto.randomUUID(),time:now.toISOString(),sales,partner,note:$('note').value.trim(),nearApproved:result.near,items:state.draft.map(i=>({...i}))};if(save({...state,orders:[order,...state.orders],draft:[]})){$('withdraw').reset();selected=null;$('result').hidden=true;openTab('log');show(`Kivitel rögzítve: ${result.total} db · ${sales} → ${partner}. A naplóban exportálható.`);}}catch(e){updateCart();show(e.message);}};
+$('nextScan').onclick=()=>{selected=null;$('result').hidden=true;$('code').value='';$('start').scrollIntoView({behavior:'smooth'});};
+window.addEventListener('focus',()=>{updateExpiry();updateCart();});setInterval(()=>{updateExpiry();updateCart();},30000);
 async function readImageCode(url){
  const reader=new ZXingBrowser.BrowserMultiFormatReader(new Map([[3,true],[8,true]]));
  try{return await reader.decodeFromImageUrl(url);}catch{}
@@ -71,36 +53,14 @@ $('imageFile').onchange=async e=>{
  finally{URL.revokeObjectURL(url);e.target.value='';}
 };
 $('manual').onsubmit=e=>{e.preventDefault();imageSession++;identify($('code').value,'kézi bevitel');};
-$('register').onclick=()=>{if(!selected?.parsed)return;try{
- const item=currentItem(),stock=Number($('stockInput').value);
- if($('stockInput').value==='')throw Error('Add meg a tényleges készletet.');
- const id=validateBatch(item,stock),previous=state.batches[id]?.stock??null;
- if(!$('stockConfirm').checked)throw Error('Erősítsd meg a termékadatokat és a tényleges készletet.');
- const record={...item,time:new Date().toISOString(),event:previous===null?'Tétel rögzítése':'Készlet helyesbítése',qty:stock,note:`Korábbi készlet: ${previous??'nem rögzített'}; új készlet: ${stock}`};
- if(save({...state,catalog:{...state.catalog,[item.gtin]:{name:item.name}},batches:{...state.batches,[id]:{...item,stock}},logs:[record,...state.logs]})){
- $('stockConfirm').checked=false;updateExpiry();show('Tétel és tényleges készlet elmentve a telefonon.');
- }
- }catch(e){show(e.message);}};
-$('withdraw').onsubmit=e=>{e.preventDefault();if(!selected?.parsed)return;try{
- const item=currentItem(),qty=Number($('qty').value),sales=$('sales').value.trim(),partner=$('partner').value.trim();
- if(!sales||!partner)throw Error('A kiadó és a kórház / partner megadása kötelező.');
- const id=batchId(item),batch=state.batches[id];
- if(!batch||batch.name!==item.name)throw Error('Előbb rögzítsd / ellenőrizd ennek a tételnek a tényleges készletét.');
- const now=new Date(),info=expiryStatus(item.expiry,now);
- const stock=validateWithdrawal(item,batch.stock,qty,now,{general:$('confirm').checked,nearExpiry:$('nearConfirm').checked});
- const record={...item,time:now.toISOString(),event:'Kiadás',qty,sales,partner,note:[$('note').value.trim(),`Készlet: ${batch.stock} → ${stock}`,info.status==='near'?`Közeli lejárat jóváhagyva: ${info.days} nap; csomagolás ellenőrizve`:''].filter(Boolean).join(' · ')};
- if(save({...state,batches:{...state.batches,[id]:{...batch,stock}},logs:[record,...state.logs]})){
- $('confirm').checked=false;$('nearConfirm').checked=false;$('stockInput').value=stock;updateExpiry();show('Kiadás rögzítve a telefonon.');
- }
- }catch(e){updateExpiry();show(e.message);}};
-$('nextScan').onclick=()=>{selected=null;$('result').hidden=true;$('code').value='';$('code').focus();$('scan').scrollIntoView({behavior:'smooth'});};
 function stop(){session++;if(controls)controls.stop();controls=null;const stream=$('video').srcObject;if(stream)stream.getTracks().forEach(t=>t.stop());$('video').srcObject=null;$('start').disabled=false;$('stop').disabled=true;$('cameraHint').hidden=false;$('cameraStatus').textContent='A kamera leállítva.';}
 $('stop').onclick=stop;
-$('start').onclick=async()=>{imageSession++;if(starting||controls)return;if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){show('A kamerához HTTPS és támogatott böngésző szükséges. Használd a kézi bevitelt.');return;}if(!window.ZXingBrowser){show('A kameraolvasó nem töltődött be. Töltsd újra az oldalt, vagy használd a kézi bevitelt.');return;}starting=true;const current=++session;$('start').disabled=true;$('stop').disabled=false;$('cameraStatus').textContent='Kamera indítása…';try{const reader=new ZXingBrowser.BrowserMultiFormatReader(new Map([[3,true],[8,true]]));const c=await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},$('video'),(result)=>{if(result&&session===current){$('code').value=result.getText();identify(result.getText(),'kamera');stop();}});if(session!==current)c.stop();else{controls=c;$('cameraHint').hidden=true;$('cameraStatus').textContent='Kamera aktív. Tartsd a kódot élesen a kép közepén.';}}catch(e){stop();show(e.name==='NotAllowedError'?'A kameraengedély nincs megadva. Engedélyezd a böngésző beállításaiban, vagy írj be kódot.':'Nem sikerült elindítani a kamerát. Zárd be a kamerát használó más appokat, vagy használd a kézi bevitelt.');}finally{starting=false;}};
+$('start').onclick=async()=>{imageSession++;if(starting||controls)return;if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){show('A kamerához HTTPS és támogatott böngésző szükséges. Használd a kézi bevitelt.');return;}if(!window.ZXingBrowser){show('A kameraolvasó nem töltődött be. Töltsd újra az oldalt, vagy használd a kézi bevitelt.');return;}starting=true;const current=++session;$('start').disabled=true;$('stop').disabled=false;$('cameraStatus').textContent='Kamera indítása…';try{const reader=new ZXingBrowser.BrowserMultiFormatReader(new Map([[3,true],[8,true]]));const c=await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},$('video'),(result)=>{if(result&&session===current){$('code').value=result.getText();identify(result.getText(),'kamera');stop();if(selected?.parsed&&selected.lot&&selected.expiry){try{addSelected();}catch(e){show(e.message);}}}});if(session!==current)c.stop();else{controls=c;$('cameraHint').hidden=true;$('cameraStatus').textContent='Kamera aktív. Tartsd a kódot élesen a kép közepén.';}}catch(e){stop();show(e.name==='NotAllowedError'?'A kameraengedély nincs megadva. Engedélyezd a böngésző beállításaiban, vagy írj be kódot.':'Nem sikerült elindítani a kamerát. Zárd be a kamerát használó más appokat, vagy használd a kézi bevitelt.');}finally{starting=false;}};
 window.addEventListener('pagehide',stop);document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
-document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{stop();document.querySelectorAll('[data-tab]').forEach(n=>n.classList.toggle('active',n===b));for(const id of ['scan','inventory','log','help'])$(id).hidden=id!==b.dataset.tab;});
-$('export').onclick=()=>{const blob=new Blob([csv(state.logs)],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='DHS-QuickScan-naplo.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);show('A CSV export elkészült. iPhone-on a megnyíló fájl a Megosztás menüből menthető.');};
-$('backup').onclick=()=>{const blob=new Blob([JSON.stringify({format:'DHS-QuickScan',version:1,exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});download(blob,'DHS-QuickScan-mentes-'+new Date().toISOString().slice(0,10)+'.json');show('Teljes mentés letöltése elindítva. Mentsd a Fájlok közé.');};
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>openTab(b.dataset.tab));
+function openTab(tab){stop();document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));for(const id of ['scan','cart','log','help'])$(id).hidden=id!==tab;updateCart();}
+$('export').onclick=()=>{download(new Blob([csv((state.orders||[]).flatMap(dispatchRows))],{type:'text/csv;charset=utf-8'}),'DHS-kivitelek.csv');};
+$('backup').onclick=()=>{download(new Blob([JSON.stringify({format:'DHS-QuickScan',version:2,exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'}),'DHS-teljes-mentes.json');};
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 function connection(){$('connection').textContent=navigator.onLine?'● Online':'○ Offline';}window.addEventListener('online',connection);window.addEventListener('offline',connection);connection();render();
 if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js').then(async()=>{await navigator.serviceWorker.ready;$('offlineReady').textContent='Offline használatra kész';}).catch(()=>{$('offlineReady').textContent='Offline gyorsítótár nem érhető el';});}else $('offlineReady').textContent='Offline mód nem támogatott';

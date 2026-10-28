@@ -1,9 +1,7 @@
-# Ellenőrzés – 2026. október 28.
+# QuickScan 1.1 ellenőrzés
 
-17 automatikus teszt sikeres. GS1, GTIN ellenőrzőszám, LOT, dátumvalidálás, 90 napos határ, éjfél, szökőév, túlkivétel, QR nyers tartalom, hibás GS1, CSV képletinjekció és tételazonosítók.
+20 automatikus teszt sikeres. Új ellenőrzések: készlet nélküli közös kivitel, minden tétel lejáratának véglegesítéskori ellenőrzése, kötelező saleses/kórház, sorozatszám ismétlése tiltott.
 
-Böngészőben új termék felvétele saját GTIN alapján; tényleges készlet 5 db rögzítése; 90 napos megerősítés nélküli kiadás tiltva; megerősítéssel 1 db kiadás után 4 db marad.
+Böngészőben 5 külön LOT-tal rendelkező tétel hozzáadása, újratöltés után piszkozat megmarad, közeli lejárat külön megerősítése kötelező. Kiss Pista → Honvédkórház, hajnali beavatkozáshoz megjegyzéssel közös kivitel véglegesítve. Exportált CSV ellenőrizve: 5 tétel, közös kivitelazonosító, saleses és partner.
 
-Generált QR-képből a DHS-ELLENORZES-QR-2026 tartalom dekódolása és naplózása sikeres. Teljes JSON-mentés letöltése sikeres.
-
-Fizikai iPhone kamera, valós csomagolások és nagy helyszíni beolvasássorozat külön ellenőrzendő.
+Nincs készletfelvitel és nincs készletcsökkentés. Fizikai iPhone kamera és a natív e-mail-megosztás készülékpróbát igényel.

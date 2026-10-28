@@ -59,3 +59,23 @@ export function validateBatch(item,stock){
  if(!Number.isSafeInteger(stock)||stock<0)throw Error('A tényleges készlet nemnegatív egész szám legyen.');
  return batchId(item);
 }
+
+export function validateDispatch(items,sales,partner,now=new Date(),confirmation={}){
+ if(!sales?.trim()||!partner?.trim())throw Error('Válaszd ki a saleses nevét és add meg a kórházat.');
+ if(!Array.isArray(items)||items.length===0)throw Error('Előbb olvass be és adj hozzá legalább egy terméket.');
+ const serials=new Set();let near=false;
+ for(const item of items){
+  if(!item.parsed||!item.gtin)throw Error('Nem ellenőrzött termékkód nem véglegesíthető.');
+  validateGTIN(item.gtin);
+  if(!item.lot?.trim())throw Error('Minden termékhez LOT szükséges.');
+  if(!Number.isSafeInteger(item.qty)||item.qty<1)throw Error('A darabszám pozitív egész legyen.');
+  if(item.serial){const id=item.gtin+'|'+item.serial;if(serials.has(id)||item.qty!==1)throw Error('Ugyanaz a sorozatszám csak egyszer vihető ki.');serials.add(id);}
+  const info=expiryStatus(item.expiry,now);
+  if(info.status==='expired')throw Error('Lejárt termék van a kivitelben: a véglegesítés TILTVA.');
+  if(info.status==='near')near=true;
+ }
+ if(confirmation.general!==true)throw Error('Erősítsd meg a kivitelt.');
+ if(near&&confirmation.nearExpiry!==true)throw Error('90 napon belüli lejárat: külön megerősítés szükséges.');
+ return {near,total:items.reduce((sum,item)=>sum+item.qty,0)};
+}
+export function dispatchRows(order){return order.items.map(item=>({...item,time:order.time,event:'Kivitel',sales:order.sales,partner:order.partner,note:[`Kivitelazonosító: ${order.id}`,'DHS raktár → '+order.partner,order.note,order.nearApproved?'Közeli lejárat külön jóváhagyva':''].filter(Boolean).join(' · ')}));}
