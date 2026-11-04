@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO,decodeScan,batchId,validateBatch,validateDispatch,dispatchRows}from'./core.js';
+import {test} from 'node:test';import assert from 'node:assert/strict';import{parseCode,take,csv,validateWithdrawal as checkedWithdrawal,expiryStatus,expiryISO,decodeScan,combineScans,batchId,validateBatch,validateDispatch,dispatchRows}from'./core.js';
 test('GS1 zárójeles és FNC1 kód',()=>{const a=parseCode('(01)05901234567893(17)291231(10)DEMO(21)ABC');assert.deepEqual(a,{gtin:'05901234567893',expiry:'291231',lot:'DEMO',serial:'ABC'});assert.deepEqual(parseCode(']d201059012345678931729123110DEMO\x1d21ABC'),a);});
 test('EAN normalizálás',()=>assert.equal(parseCode('4012345678901').gtin,'04012345678901'));
 test('hibás GS1 és dátum elutasítása',()=>{for(const s of ['','hello','(01)123','(01)05901234567893(17)291332','(01)05901234567893(17)290230','(01)05901234567893(99)X'])assert.throws(()=>parseCode(s));});
@@ -95,4 +95,20 @@ test('sorozatszámos termék duplázása és többszörös darabszáma tiltott',
  const item={...decodeScan('(01)04260279096722(17)291231(10)A(21)SN1'),qty:1},now=new Date('2026-10-28T12:00:00Z');
  assert.throws(()=>validateDispatch([item,item],'Pista','Kórház',now,{general:true}),/sorozatszám/);
  assert.throws(()=>validateDispatch([{...item,qty:2}],'Pista','Kórház',now,{general:true}),/sorozatszám/);
+});
+
+test('SENTINEL két GS1-128 vonalkódja mindkét sorrendben',()=>{
+ const a=decodeScan(']C10100863229000028');
+ const b=decodeScan(']C1172807021039723458');
+ assert.equal(a.parsed,true);assert.equal(b.parsed,true);
+ assert.equal(b.gtin,'');assert.equal(b.expiry,'280702');assert.equal(b.lot,'39723458');
+ for(const [first,second] of [[a,b],[b,a]]){
+  const merged=combineScans(combineScans(null,first),second);
+  assert.equal(merged.gtin,'00863229000028');
+  assert.equal(merged.lot,'39723458');
+  assert.equal(expiryISO(merged.expiry),'2028-07-02');
+  assert.equal(merged.rawCodes.length,2);
+ }
+ assert.throws(()=>combineScans(a,{...b,gtin:'04260279096722'}),/Eltérő/);
+ assert.equal(combineScans(combineScans(null,a),a).rawCodes.length,1);
 });
