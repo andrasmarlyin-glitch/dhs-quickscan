@@ -1,11 +1,12 @@
-export function parseCode(raw){
+export function parseCode(raw,{allowPartial=false}={}){
  let s=raw.trim().replace(/^\](?:d2|C1|Q3)/,''); if(!s)throw Error('Adj meg egy kódot.');
  if(/^\d{8}$|^\d{12,14}$/.test(s)){validateGTIN(s);return {gtin:s.padStart(14,'0'),lot:'',expiry:'',serial:''};}
  let out={gtin:'',lot:'',expiry:'',serial:''}; const keys={'01':['gtin',14],'17':['expiry',6],'10':['lot',0],'21':['serial',0],'11':['production',6],'91':['internal91',0]};
  if(s.startsWith('(')){let re=/\((\d{2})\)([^()]*)/g,m,end=0;while((m=re.exec(s))){if(m.index!==end||!keys[m[1]])throw Error('Nem támogatott GS1 mező.');if(out[keys[m[1]][0]])throw Error('Ismétlődő GS1 mező.');if(!m[2])throw Error('Üres GS1 mező.');if(keys[m[1]][1]&&m[2].length!==keys[m[1]][1])throw Error('Hibás GS1 mezőhossz.');out[keys[m[1]][0]]=m[2];end=re.lastIndex;}if(end!==s.length)throw Error('Hibás GS1 formátum.');}
  else {while(s.length){if(s[0]==='\x1d'){s=s.slice(1);continue;}let k=s.slice(0,2),spec=keys[k];if(!spec)throw Error('Nem támogatott GS1 mező: '+k);s=s.slice(2);if(out[spec[0]])throw Error('Ismétlődő GS1 mező.');if(spec[1]){out[spec[0]]=s.slice(0,spec[1]);s=s.slice(spec[1]);}else{let pos=s.indexOf('\x1d');out[spec[0]]=pos<0?s:s.slice(0,pos);s=pos<0?'':s.slice(pos+1);}}}
- if(!/^\d{14}$/.test(out.gtin))throw Error('A GS1 (01) GTIN 14 számjegy legyen.');
- validateGTIN(out.gtin);
+ if(!out.gtin&&!allowPartial)throw Error('A GS1 (01) GTIN 14 számjegy legyen.');
+ if(out.gtin){if(!/^\d{14}$/.test(out.gtin))throw Error('A GS1 (01) GTIN 14 számjegy legyen.');validateGTIN(out.gtin);}
+ if(!out.gtin&&!out.lot&&!out.expiry&&!out.serial)throw Error('Hiányzó termékazonosító és GS1 adatok.');
  if(out.production)expiryISO(out.production);
  if(out.internal91&&out.internal91.length>90)throw Error('A belső mező túl hosszú.');
  if(out.lot.length>20||out.serial.length>20)throw Error('A LOT és sorozatszám legfeljebb 20 karakter.');
@@ -47,8 +48,15 @@ export function validateWithdrawal(item,stock,qty,now=new Date(),confirmation={}
 export function decodeScan(raw){
  if(typeof raw!=='string'||!raw.trim())throw Error('Adj meg vagy olvass be egy kódot.');
  if(raw.length>16000)throw Error('A kód túl hosszú (legfeljebb 16000 karakter).');
- try{return {raw,...parseCode(raw),parsed:true,parseError:''};}
+ try{return {raw,...parseCode(raw,{allowPartial:true}),parsed:true,parseError:''};}
  catch(e){return {raw,gtin:'',lot:'',expiry:'',serial:'',parsed:false,parseError:e.message};}
+}
+export function combineScans(previous,incoming){
+ if(!previous)return {...incoming,rawCodes:[incoming.raw]};
+ if(!incoming.parsed||!previous.parsed)throw Error('Nem értelmezhető vonalkód.');
+ const fields=['gtin','lot','expiry','serial'];
+ for(const field of fields){if(previous[field]&&incoming[field]&&previous[field]!==incoming[field])throw Error('Eltérő '+field+' adat: a két kód nem egyesíthető.');}
+ return {...previous,...Object.fromEntries(fields.map(k=>[k,previous[k]||incoming[k]||''])),raw:[...new Set([...(previous.rawCodes||[previous.raw]),incoming.raw])].join(' | '),rawCodes:[...new Set([...(previous.rawCodes||[previous.raw]),incoming.raw])],parsed:true,parseError:''};
 }
 export function batchId(item){return JSON.stringify([item.gtin,item.lot.trim(),expiryISO(item.expiry)]);}
 export function validateBatch(item,stock){
