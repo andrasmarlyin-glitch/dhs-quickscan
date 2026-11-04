@@ -32,18 +32,33 @@ for(const id of ['sales','partner']){$(id).oninput=()=>{$('nearConfirm').checked
 $('withdraw').onsubmit=e=>{e.preventDefault();try{const now=new Date(),sales=$('sales').value,partner=$('partner').value.trim(),result=validateDispatch(state.draft,sales,partner,now,{general:$('confirm').checked,nearExpiry:$('nearConfirm').checked});const order={id:crypto.randomUUID(),time:now.toISOString(),sales,partner,note:$('note').value.trim(),nearApproved:result.near,email:{status:'pending'},items:state.draft.map(i=>({...i}))};if(save({...state,orders:[order,...state.orders],draft:[]})){$('withdraw').reset();selected=null;$('result').hidden=true;openTab('log');show(`Kivitel rögzítve: ${result.total} db · ${sales} → ${partner}. Az e-mail küldése külön állapotjelzést kap.`);sendOrderMail(order.id);}}catch(e){updateCart();show(e.message);}};
 $('nextScan').onclick=()=>{pendingScan=null;selected=null;$('result').hidden=true;$('code').value='';$('start').scrollIntoView({behavior:'smooth'});};
 window.addEventListener('focus',()=>{updateExpiry();updateCart();});setInterval(()=>{updateExpiry();updateCart();},30000);
-async function readImageCode(url){
+async function readImageCodes(url){
  const reader=new ZXingBrowser.BrowserMultiFormatReader(new Map([[3,true],[8,true]]));
- try{return await reader.decodeFromImageUrl(url);}catch{}
  const image=new Image();image.src=url;await image.decode();
- const w=image.naturalWidth,h=image.naturalHeight,side=Math.min(w,h);
- for(let i=0;i<=8;i++){
-  const x=w>h?(w-side)*i/8:0,y=h>w?(h-side)*i/8:0;
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=Math.min(side,1200);
-  canvas.getContext('2d').drawImage(image,x,y,side,side,0,0,canvas.width,canvas.height);
-  try{return await reader.decodeFromImageUrl(canvas.toDataURL('image/png'));}catch{}
+ const w=image.naturalWidth,h=image.naturalHeight;
+ const found=new Map();
+ async function scan(x,y,cw,ch){
+  const canvas=document.createElement('canvas');
+  const scale=Math.min(1,1600/Math.max(cw,ch));
+  canvas.width=Math.max(1,Math.round(cw*scale));canvas.height=Math.max(1,Math.round(ch*scale));
+  canvas.getContext('2d').drawImage(image,x,y,cw,ch,0,0,canvas.width,canvas.height);
+  try{const result=await reader.decodeFromImageUrl(canvas.toDataURL('image/png'));const raw=result.getText();if(raw)found.set(raw,raw);}catch{}
  }
- throw Error('Nem olvasható képkód.');
+ await scan(0,0,w,h);
+ // GS1 labels frequently contain two stacked barcodes. Scan overlapping horizontal
+ // bands separately, so a decoder that returns only one result cannot hide the other.
+ for(const [top,height] of [[0,.52],[.35,.5],[.48,.52],[0,.7],[.3,.7]]){
+  await scan(0,Math.floor(h*top),w,Math.min(h-Math.floor(h*top),Math.ceil(h*height)));
+ }
+ if(!found.size){
+  const side=Math.min(w,h);
+  for(let i=0;i<=8&&!found.size;i++){
+   const x=w>h?(w-side)*i/8:0,y=h>w?(h-side)*i/8:0;
+   await scan(x,y,side,side);
+  }
+ }
+ if(!found.size)throw Error('Nem olvasható képkód.');
+ return [...found.values()];
 }
 let imageSession=0;
 $('imageFile').onchange=async e=>{
@@ -52,7 +67,7 @@ $('imageFile').onchange=async e=>{
  if(file.size>25*1024*1024){show('Legfeljebb 25 MB méretű képet válassz.');e.target.value='';return;}
  if(!window.ZXingBrowser){show('A kódolvasó nem töltődött be.');e.target.value='';return;}
  const url=URL.createObjectURL(file);show('Kód keresése a képen…');
- try{const result=await readImageCode(url);if(token!==imageSession)return;$('code').value=result.getText();identify(result.getText(),'kép');}
+ try{const codes=await readImageCodes(url);if(token!==imageSession)return;for(const raw of codes){if(token!==imageSession)return;$('code').value=raw;identify(raw,'kép');}}
  catch{if(token===imageSession)show('Nem sikerült kódot olvasni ebből a képből. Vágd körbe a kódot kis fehér szegéllyel, válassz élesebb JPG/PNG képet, vagy használd a kézi bevitelt.');}
  finally{URL.revokeObjectURL(url);e.target.value='';}
 };
