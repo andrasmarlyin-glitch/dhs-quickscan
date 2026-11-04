@@ -117,3 +117,10 @@ test('UI displays merged GS1 fields, not last scan fragment',async()=>{
  const {readFile}=await import('node:fs/promises');const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
  for(const field of ['gtin','lot','expiry','serial'])assert.match(app,new RegExp("'"+(field==='gtin'?'GTIN':field==='lot'?'LOT':field==='expiry'?'Lejárat':'Sorozatszám')+"':selected\\."+field));
 });
+
+test('photo scanner collects multiple barcode results',async()=>{
+ const {readFile}=await import('node:fs/promises');const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ assert.match(app,/async function readImageCodes\(url\)/);
+ assert.match(app,/for\(const raw of codes\)/);
+ assert.match(app,/\[\[0,\.52\],\[\.35,\.5\],\[\.48,\.52\]/);
+});
