@@ -19,10 +19,10 @@ function scanFeedback(complete){
  if(navigator.vibrate)try{navigator.vibrate(complete?75:35);}catch{}
  try{if(!scanAudio||scanAudio.state!=='running')return;
   const osc=scanAudio.createOscillator(),gain=scanAudio.createGain(),now=scanAudio.currentTime;
-  osc.type='sine';osc.frequency.value=complete?950:660;
-  gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.12,now+.012);
-  gain.gain.exponentialRampToValueAtTime(.0001,now+.115);
-  osc.connect(gain);gain.connect(scanAudio.destination);osc.start(now);osc.stop(now+.13);
+  osc.type='square';osc.frequency.value=complete?1750:1250;
+  gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.075,now+.006);
+  gain.gain.exponentialRampToValueAtTime(.0001,now+.095);
+  osc.connect(gain);gain.connect(scanAudio.destination);osc.start(now);osc.stop(now+.105);
  }catch{}
 }
 document.addEventListener('pointerdown',enableScanAudio,{passive:true});
